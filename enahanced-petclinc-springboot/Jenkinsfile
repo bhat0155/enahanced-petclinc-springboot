@@ -105,6 +105,7 @@ pipeline {
                             --overwrite-existing
 
                         kubectl apply -f enahanced-petclinc-springboot/k8s/sprinboot-deployment.yaml
+                        kubectl rollout restart deployment/springboot-app
                     """
                 }
             }
