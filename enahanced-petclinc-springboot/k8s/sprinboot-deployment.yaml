@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: springboot-app
+  labels:
+    app: springboot-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: springboot-app
+  template:
+    metadata:
+      labels:
+        app: springboot-app
+    spec:
+      containers:
+      - name: springboot-app
+        image: springbootdockerreg.azurecr.io/springbootapp:latest
+        ports:
+        - containerPort: 8080
+      imagePullSecrets:
+      - name: acr-auth
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: springboot-app  
+  labels:
+    app: springboot-app
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: springboot-app
