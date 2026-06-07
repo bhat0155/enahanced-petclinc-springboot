@@ -860,3 +860,74 @@ PHASE 6: Jenkinsfile (write one stage at a time, test before moving on)
   Step 24  Install Azure CLI on VM → Stage 7 — ACR Login + Docker Push
   Step 25  Install kubectl on VM → Stage 8 — Deploy to AKS
 ```
+
+---
+
+## Restart Checklist — What to Recreate After Deleting Everything
+
+The Jenkinsfile, k8s YAML, and all source code are already in GitHub. The pipeline will run
+again as-is. What you need to recreate is the **infrastructure and credentials** — the things
+that live outside the repo.
+
+### Azure Infrastructure (do these first)
+
+1. **Create resource group** `petclinic-rg` — Step 1
+2. **Create Ubuntu VM** `jenkins-vm` in `petclinic-rg` — Step 2
+3. **Open port 8080** on the VM — Step 3
+4. **Create ACR** with the same name `yournamepetclinic` (or update `ACR_NAME` and
+   `ACR_LOGIN_SERVER` in the Jenkinsfile if you use a different name) — Step 9
+5. **Create AKS cluster** `myAKSCluster` in `petclinic-rg` — Step 10
+6. **Create Service Principal** `jenkins-spn` and give it AcrPush on your ACR — Step 11
+7. **Attach ACR to AKS** — Step 12
+
+### Jenkins Setup (on the new VM)
+
+8. **Install Git + Java 21 + Jenkins** — Step 4
+9. **Access Jenkins**, install suggested plugins, create admin user — Step 5
+10. **Install plugins**: Docker Pipeline, SonarQube Scanner, Kubernetes CLI — Step 6
+11. **Install Maven 3.9.16** on the VM and configure it in Jenkins Tools as `maven` — Step 7
+12. **Configure SonarQube Scanner** tool in Jenkins as `Sonar-scanner` — Step 8
+13. **Install Docker** on the VM, add jenkins to docker group, restart Jenkins — Step 22
+14. **Install Trivy** on the VM — Step 23
+15. **Install Azure CLI** on the VM — Step 24
+16. **Install kubectl** on the VM — Step 25
+
+### Jenkins Credentials and Config (inside Jenkins UI)
+
+17. **Generate a new SonarCloud token** (old one is still valid if you didn't revoke it)
+18. **Add SonarQube server** in Manage Jenkins → System → named `sonarserver`,
+    URL `https://sonarcloud.io`, token credential ID `sonar` — Step 14
+19. **Add Service Principal credential** — Kind: Username with Password, ID `azure-acr-spn`,
+    Username = appId, Password = SP secret — Step 15
+
+### Create the Jenkins Pipeline Job
+
+20. New Item → `petclinic-pipeline` → Pipeline → Pipeline script from SCM → Git
+    - URL: `https://github.com/bhat0155/enahanced-petclinc-springboot.git`
+    - Branch: `*/main`
+    - Script Path: `enahanced-petclinc-springboot/Jenkinsfile`
+
+### What you do NOT need to redo
+
+- The Jenkinsfile — already in GitHub
+- The k8s deployment YAML — already in GitHub
+- The Dockerfile — already in GitHub
+- SonarCloud project and organization — still exists at sonarcloud.io
+- The `sonar` credential value — reuse the same token or generate a new one
+
+### Quick reference — values to carry forward
+
+| Item | Value |
+|------|-------|
+| Resource group | `petclinic-rg` |
+| AKS cluster name | `myAKSCluster` |
+| ACR name | `yournamepetclinic` |
+| ACR login server | `yournamepetclinic.azurecr.io` |
+| Tenant ID | `6bb8aa1e-d7a1-4e0d-aae3-073137d6fded` |
+| SP app ID | `5afec6b1-289c-4883-ac5a-103a3a515ad4` |
+| SonarCloud org | `bhat0155` |
+| SonarCloud project key | `bhat0155_enahanced-petclinc-springboot` |
+| Jenkins credential ID (SP) | `azure-acr-spn` |
+| Jenkins credential ID (Sonar) | `sonar` |
+| Jenkins SonarQube server name | `sonarserver` |
+| Jenkins Maven tool name | `maven` |
