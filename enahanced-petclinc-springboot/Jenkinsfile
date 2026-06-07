@@ -23,5 +23,10 @@ pipeline {
                     url: 'https://github.com/bhat0155/enahanced-petclinc-springboot.git'
             }
         }
+        stage('Maven Build'){
+            steps {
+                sh 'mvn package -f enahanced-petclinc-springboot/pom.xml'
+            }
+        }
     }
 }
