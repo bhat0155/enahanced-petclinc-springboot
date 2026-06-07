@@ -86,5 +86,28 @@ pipeline {
                 }
             }
         }
+        stage('Deploy to AKS') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'azure-acr-spn',
+                    usernameVariable: 'AZURE_USERNAME',
+                    passwordVariable: 'AZURE_PASSWORD'
+                )]) {
+                    sh """
+                        az login --service-principal \
+                            -u \$AZURE_USERNAME \
+                            -p \$AZURE_PASSWORD \
+                            --tenant ${TENANT_ID}
+
+                        az aks get-credentials \
+                            --resource-group ${RG} \
+                            --name ${NAME} \
+                            --overwrite-existing
+
+                        kubectl apply -f enahanced-petclinc-springboot/k8s/sprinboot-deployment.yaml
+                    """
+                }
+            }
+        }
     }
 }
