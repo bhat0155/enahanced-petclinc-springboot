@@ -542,33 +542,49 @@ stage('Maven Build') {
 ### Step 20 — Stage 3: SonarQube Analysis
 
 #### What it is
-SonarQube Scanner reads your compiled code, checks it for bugs, security vulnerabilities, and bad practices, then sends the results to SonarCloud. This stage uploads the results — it does not pass or fail the pipeline. The next stage does that.
+Maven's built-in Sonar plugin reads your compiled code, checks it for bugs, security vulnerabilities, and bad practices, then uploads the results to SonarCloud. This stage uploads the results — it does not pass or fail the pipeline. The next stage does that.
+
+#### Before writing the stage — disable Automatic Analysis in SonarCloud
+SonarCloud has an "Automatic Analysis" feature that tries to scan your code automatically on every push. If it's on, it conflicts with your Jenkins scan and the pipeline fails with "Project not found" or duplicate analysis errors.
+
+1. Go to sonarcloud.io → your project → **Administration** → **Analysis Method**
+2. Make sure **Automatic Analysis is OFF**
+
+#### Why `withCredentials` instead of `withSonarQubeEnv`?
+`withSonarQubeEnv('sonarserver')` is a Jenkins wrapper that injects your token via an encrypted env variable called `SONARQUBE_SCANNER_PARAMS`. Newer versions of the Maven Sonar plugin stopped reading it reliably — the plugin runs but can't find the project config, so it reports "Project not found."
+
+`withCredentials` bypasses that entirely. It pulls the raw token string from Jenkins secrets and puts it directly in `$SONAR_TOKEN`. You then pass it on the Maven command line with `-Dsonar.token=$SONAR_TOKEN`. Maven sees it directly, no middleware.
+
+#### Why `mvn sonar:sonar` instead of standalone `sonar-scanner`?
+For Maven projects, the Maven Sonar plugin (`mvn sonar:sonar`) is the recommended approach. It already knows your project structure from `pom.xml`, so you don't need to manually specify `sonar.java.binaries` or source paths.
 
 #### What to write
 ```groovy
 stage('SonarQube Analysis') {
-    environment {
-        SCANNER_HOME = tool 'Sonar-scanner'
-    }
     steps {
-        withSonarQubeEnv('sonarserver') {
+        withCredentials([string(credentialsId: 'sonar', variable: 'SONAR_TOKEN')]) {
             sh """
-                ${SCANNER_HOME}/bin/sonar-scanner \
+                mvn sonar:sonar \
+                -f enahanced-petclinc-springboot/pom.xml \
+                -Dsonar.host.url=https://sonarcloud.io \
                 -Dsonar.organization=<your-org-key> \
-                -Dsonar.projectName=<your-project-name> \
                 -Dsonar.projectKey=<your-project-key> \
-                -Dsonar.java.binaries=enahanced-petclinc-springboot/target
+                -Dsonar.token=\$SONAR_TOKEN \
+                -DskipTests
             """
         }
     }
 }
 ```
 
-Fill in your SonarCloud organization key, project name, and project key from Step 13.
+Fill in your SonarCloud organization key and project key from Step 13.
+
+Note: `\$SONAR_TOKEN` — the backslash is required so the shell evaluates it at runtime (after `withCredentials` has injected it), not when Groovy first processes the string.
 
 #### Definition of done
-- Build logs show analysis uploaded to SonarCloud
-- SonarCloud dashboard shows your project with scan results
+- Build logs show `ANALYSIS SUCCESSFUL`
+- Build logs show `BUILD SUCCESS`
+- SonarCloud dashboard shows your project with fresh scan results
 
 ---
 
