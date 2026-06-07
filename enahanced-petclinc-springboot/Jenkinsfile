@@ -29,17 +29,14 @@ pipeline {
             }
         }
         stage('SonarQube Analysis') {
-            environment {
-                SCANNER_HOME = tool 'Sonar-scanner'
-            }
             steps {
                 withSonarQubeEnv('sonarserver') {
                     sh """
-                        ${SCANNER_HOME}/bin/sonar-scanner \
+                        mvn sonar:sonar \
+                        -f enahanced-petclinc-springboot/pom.xml \
                         -Dsonar.organization=bhat0155 \
-                        -Dsonar.projectName=enahanced-petclinc-springboot \
                         -Dsonar.projectKey=bhat0155_enahanced-petclinc-springboot \
-                        -Dsonar.java.binaries=enahanced-petclinc-springboot/target
+                        -DskipTests
                     """
                 }
             }
