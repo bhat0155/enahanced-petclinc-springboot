@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(cp /Users/ekambhatia/.claude/image-cache/59be343c-76fc-49f2-b619-b8879f88e43e/73.png /Users/ekambhatia/Desktop/NCPL/bootcamp/practice/petclinic/logic/images/live-app.png)",
+      "Bash(cp /Users/ekambhatia/.claude/image-cache/59be343c-76fc-49f2-b619-b8879f88e43e/74.png /Users/ekambhatia/Desktop/NCPL/bootcamp/practice/petclinic/logic/images/pipeline-all-green.png)"
     ]
   }
 }
