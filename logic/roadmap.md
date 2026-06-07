@@ -3,12 +3,17 @@
 
 This roadmap starts from nothing — no VM, no Jenkins, no Azure resources. Every step has a plain-English explanation of what it is and why it exists, concrete instructions, and a definition of done so you know exactly when to move on.
 
+**We install each tool only when we need it.** You will understand why every tool exists because you install it right before you use it.
+
 **Analogy map (for a MERN developer):**
 - Azure VM = a Linux server in the cloud (like an EC2 instance)
 - Jenkins = self-hosted GitHub Actions — it runs your pipeline on that VM
+- Maven = like npm for Java — installs dependencies and builds the project
+- Docker = packages your app into a container image
 - ACR = a private Docker Hub owned by you in Azure
 - AKS = managed Kubernetes — Azure runs the cluster nodes for you
 - Service Principal = a machine account with a username + password (like an API key for Azure)
+- Trivy = a security scanner that checks your Docker image for known vulnerabilities
 
 ---
 
@@ -26,11 +31,11 @@ A Resource Group is a folder in Azure that holds all your resources (VM, ACR, AK
 2. Search for **Resource groups** → Create
 3. **Subscription**: your subscription
 4. **Resource group name**: `petclinic-rg`
-5. **Region**: `East US` (or the one closest to you)
+5. **Region**: pick the one closest to you
 6. Review + Create → Create
 
 #### Definition of done
-- Resource group `petclinic-rg` appears in your Resource groups list
+- Resource group appears in your Resource groups list
 
 ---
 
@@ -41,7 +46,7 @@ This VM is the machine Jenkins will run on. All your pipeline commands (Maven bu
 
 #### How to do it
 1. Azure Portal → search **Virtual Machines** → Create → Azure Virtual Machine
-2. **Resource group**: `petclinic-rg`
+2. **Resource group**: your resource group from Step 1
 3. **Virtual machine name**: `jenkins-vm`
 4. **Region**: same as your resource group
 5. **Image**: `Ubuntu Server 22.04 LTS`
@@ -56,6 +61,7 @@ This VM is the machine Jenkins will run on. All your pipeline commands (Maven bu
 #### Definition of done
 - VM named `jenkins-vm` appears in Virtual Machines with status `Running`
 - You have the `.pem` file saved on your Mac
+- Note down your **VM public IP** from the Overview tab — you will use it constantly
 
 ---
 
@@ -65,7 +71,7 @@ This VM is the machine Jenkins will run on. All your pipeline commands (Maven bu
 By default Azure blocks all inbound traffic except SSH. Jenkins runs on port 8080. You need to open that port so you can access Jenkins from your browser.
 
 #### How to do it
-1. Go to your `jenkins-vm` → **Networking** → **Add inbound port rule**
+1. Go to your `jenkins-vm` → **Networking** → **Network settings** → **Add inbound port rule**
 2. **Source**: Any
 3. **Destination port ranges**: `8080`
 4. **Protocol**: TCP
@@ -77,66 +83,74 @@ By default Azure blocks all inbound traffic except SSH. Jenkins runs on port 808
 
 ---
 
-### Step 4 — SSH into the VM and Run installations.sh
+### Step 4 — SSH into the VM and Install Java + Git + Jenkins
 
-#### What it is
-`installations.sh` is a script in your repo that installs every tool the pipeline needs on the VM in one shot: Java, Git, Maven, Jenkins, Docker, Trivy, Azure CLI, and kubectl.
+#### Why only these three?
+Jenkins is the engine — nothing else runs until Jenkins is up. Jenkins itself needs Java to run. Git is needed so Jenkins can clone your repo. Everything else (Maven, Docker, Trivy, Azure CLI, kubectl) gets installed later, right before you need it.
 
-#### How to do it
-
-**On your Mac terminal:**
+#### SSH into the VM
+On your Mac terminal:
 ```bash
 # Fix permissions on your .pem key (required by SSH)
 chmod 400 ~/path/to/your-key.pem
 
-# SSH into the VM (replace <VM_PUBLIC_IP> with your VM's IP from Azure Portal)
+# Connect to the VM
 ssh -i ~/path/to/your-key.pem azureuser@<VM_PUBLIC_IP>
 ```
 
-**Once inside the VM:**
+#### Install Git
 ```bash
-# Download your installations.sh directly from GitHub
-curl -O https://raw.githubusercontent.com/bhat0155/enahanced-petclinc-springboot/main/installations.sh
-
-# Make it executable
-chmod +x installations.sh
-
-# Run it (takes 5-10 minutes)
-./installations.sh
+sudo apt-get update -y
+sudo apt-get install -y git
+git --version
 ```
 
-**After it finishes — reboot the VM:**
+#### Install Java 17
+Jenkins requires Java to run. Java 17 is the current LTS version.
 ```bash
-sudo reboot
+sudo apt-get install -y openjdk-17-jdk
+java -version
 ```
-The reboot is required so Jenkins picks up its Docker group membership. Without it, Jenkins cannot run Docker commands.
+
+#### Install Jenkins
+```bash
+sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
+  https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+  https://pkg.jenkins.io/debian-stable binary/" | sudo tee \
+  /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+sudo apt-get update -y
+sudo apt-get install -y jenkins
+sudo systemctl enable jenkins
+sudo systemctl start jenkins
+```
+
+#### Get the initial admin password (you will need this in Step 5)
+```bash
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+```
+Copy this password — you need it to unlock Jenkins in your browser.
 
 #### Definition of done
-- Script finishes with `All tools installed successfully`
-- After reboot, SSH back in and run:
-  - `java -version` → shows Java 17
-  - `mvn -version` → shows Maven
-  - `docker --version` → shows Docker
-  - `jenkins --version` → shows Jenkins
-  - `trivy --version` → shows Trivy
-  - `az --version` → shows Azure CLI
-  - `kubectl version --client` → shows kubectl
+- `git --version` → shows a version number
+- `java -version` → shows Java 17
+- `sudo systemctl status jenkins` → shows `active (running)`
+- You have the initial admin password copied
 
 ---
 
 ### Step 5 — Access Jenkins for the First Time
 
 #### What it is
-Jenkins has a web UI. You access it in your browser at `http://<VM_PUBLIC_IP>:8080`. The first time you open it, Jenkins asks for an admin password that was printed at the end of `installations.sh`. If you missed it, SSH into the VM and run:
-```bash
-sudo cat /var/lib/jenkins/secrets/initialAdminPassword
-```
+Jenkins has a web UI. You access it at `http://<VM_PUBLIC_IP>:8080`. The first time you open it, Jenkins asks for the admin password you copied in Step 4.
 
 #### How to do it
 1. Open browser → `http://<VM_PUBLIC_IP>:8080`
 2. Paste the initial admin password
 3. Click **Install suggested plugins** — wait for it to finish
-4. Create your admin user (username, password, email)
+4. Create your admin user (choose a username, password, and email)
 5. Set Jenkins URL to `http://<VM_PUBLIC_IP>:8080` → Save and Finish
 
 #### Definition of done
@@ -152,36 +166,46 @@ Plugins extend Jenkins with extra capabilities. The pipeline needs plugins for D
 
 #### How to do it
 1. Jenkins UI → **Manage Jenkins** → **Plugins** → **Available plugins**
-2. Search and install each of the following (check the box, then click Install):
+2. Search and install each of the following (tick the checkbox, then click Install):
    - `Docker Pipeline`
    - `SonarQube Scanner`
    - `Kubernetes CLI`
-3. Check **Restart Jenkins when installation is complete**
+3. Check **Restart Jenkins when installation is complete** and wait for it
 
 #### Definition of done
-- All 3 plugins show as Installed in the Installed tab
+- All 3 plugins show as Installed under the Installed tab
 - Jenkins restarts and you can log back in
 
 ---
 
-## PHASE 2 — Jenkins Tool Configuration
+## PHASE 2 — Jenkins + Maven Setup
 
 ---
 
-### Step 7 — Configure Maven in Jenkins
+### Step 7 — Install Maven on the VM + Configure it in Jenkins
 
-#### What it is
-Jenkins needs to know where Maven is installed on the VM so it can call it during the build stage. You tell it by registering Maven as a "tool" in Jenkins settings.
+#### Why now?
+The Maven Build stage needs Maven. Installing it now so you can configure the Jenkins tool and immediately test it in Step 19.
 
-#### How to do it
+#### Install Maven on the VM
+SSH into your VM and run:
+```bash
+sudo apt-get install -y maven
+mvn -version
+```
+
+#### Configure Maven as a Jenkins tool
+Jenkins needs to know where Maven lives on the VM so it can call it during builds.
+
 1. Jenkins UI → **Manage Jenkins** → **Tools**
 2. Scroll to **Maven installations** → **Add Maven**
-3. **Name**: `maven` (this name must match exactly what the Jenkinsfile will declare)
-4. Uncheck "Install automatically"
+3. **Name**: `maven` (must match exactly — this is what the Jenkinsfile will reference)
+4. Uncheck **Install automatically**
 5. **MAVEN_HOME**: `/usr/share/maven`
 6. Save
 
 #### Definition of done
+- `mvn -version` on the VM shows Maven installed
 - Maven tool named `maven` is saved in Jenkins Tools
 
 ---
@@ -189,7 +213,7 @@ Jenkins needs to know where Maven is installed on the VM so it can call it durin
 ### Step 8 — Configure SonarQube Scanner in Jenkins
 
 #### What it is
-SonarQube Scanner is a command-line tool that analyzes your code and sends results to SonarCloud. Jenkins needs to know where it is (or install it automatically).
+SonarQube Scanner is a command-line tool that analyzes your code and sends results to SonarCloud. You let Jenkins install it automatically — no manual install needed on the VM.
 
 #### How to do it
 1. Jenkins UI → **Manage Jenkins** → **Tools**
@@ -214,30 +238,30 @@ ACR is your private Docker image registry — like a private Docker Hub hosted i
 
 #### How to do it
 1. Azure Portal → search **Container registries** → Create
-2. **Resource group**: `petclinic-rg`
-3. **Registry name**: choose a unique name, e.g. `yournamepetclinic` (must be globally unique, lowercase letters and numbers only)
+2. **Resource group**: your resource group
+3. **Registry name**: choose a unique name e.g. `yournamepetclinic` (globally unique, lowercase only)
 4. **Location**: same region as your VM
 5. **SKU**: Basic
 6. Review + Create → Create
 
-#### Note your values
-- **Registry name**: e.g. `yournamepetclinic`
-- **Login server**: e.g. `yournamepetclinic.azurecr.io` (shown in the Overview tab)
+#### Note down
+- **Registry name** (short name, e.g. `yournamepetclinic`)
+- **Login server** (e.g. `yournamepetclinic.azurecr.io`) — visible in the Overview tab
 
 #### Definition of done
 - ACR appears in Container registries with status Ready
-- You can see the Login server URL in the Overview tab
+- You have noted down the registry name and login server URL
 
 ---
 
 ### Step 10 — Create AKS Cluster
 
 #### What it is
-AKS (Azure Kubernetes Service) is the managed Kubernetes cluster where your app will actually run. Azure handles the control plane (the Kubernetes API server) — you just define what to deploy and Kubernetes runs it across nodes.
+AKS (Azure Kubernetes Service) is the managed Kubernetes cluster where your app will actually run. Azure handles the control plane — you just define what to deploy and Kubernetes runs it.
 
 #### How to do it
 1. Azure Portal → search **Kubernetes services** → Create → Create a Kubernetes cluster
-2. **Resource group**: `petclinic-rg`
+2. **Resource group**: your resource group
 3. **Cluster name**: `myAKSCluster`
 4. **Region**: same as everything else
 5. **Node count**: 1 (enough for a bootcamp)
@@ -253,36 +277,32 @@ AKS (Azure Kubernetes Service) is the managed Kubernetes cluster where your app 
 ### Step 11 — Create a Service Principal
 
 #### What it is
-A Service Principal is a machine identity in Azure — like a robot user account with a username (Client ID) and password (Secret). Jenkins uses it to log into Azure and perform actions (push to ACR, deploy to AKS) without a human typing a password.
+A Service Principal is a machine identity in Azure — like a robot user with a username (Client ID) and password (Secret). Jenkins uses it to log into Azure and perform actions (push to ACR, deploy to AKS) without a human typing a password each time.
 
 #### How to do it
-The easiest way is via Azure CLI on your Mac or in the VM:
+Run this on your Mac terminal (you need Azure CLI installed — run `brew install azure-cli` if you don't have it):
 
 ```bash
 # Login to Azure
 az login
 
-# Create the Service Principal (replace <your-subscription-id>)
+# Create the Service Principal
 az ad sp create-for-rbac --name "jenkins-spn" --role Contributor \
-  --scopes /subscriptions/<your-subscription-id>/resourceGroups/petclinic-rg
+  --scopes /subscriptions/<your-subscription-id>/resourceGroups/<your-resource-group>
 ```
 
 This outputs JSON — **save all four values immediately, you cannot retrieve the password later:**
 ```json
 {
-  "appId":       "...",   ← this is the Client ID (username for Jenkins)
-  "displayName": "jenkins-spn",
-  "password":    "...",   ← this is the Secret (password for Jenkins)
-  "tenant":      "..."    ← this is the Tenant ID
+  "appId":    "...",   ← Client ID  (username Jenkins will use)
+  "password": "...",   ← Secret     (password Jenkins will use)
+  "tenant":   "..."    ← Tenant ID  (goes into the Jenkinsfile)
 }
 ```
 
 Then give it permission to push to ACR:
 ```bash
-# Get your ACR resource ID
-ACR_ID=$(az acr show --name <your-acr-name> --resource-group petclinic-rg --query id -o tsv)
-
-# Assign AcrPush role to the Service Principal
+ACR_ID=$(az acr show --name <your-acr-name> --resource-group <your-rg> --query id -o tsv)
 az role assignment create --assignee <appId> --role AcrPush --scope $ACR_ID
 ```
 
@@ -294,19 +314,18 @@ az role assignment create --assignee <appId> --role AcrPush --scope $ACR_ID
 ### Step 12 — Attach ACR to AKS
 
 #### What it is
-By default, AKS cannot pull images from your private ACR — it doesn't have credentials. This command grants AKS the `AcrPull` role on your ACR so it can pull images without any extra secrets in your deployment YAML.
+By default, AKS cannot pull images from your private ACR. This command grants AKS the `AcrPull` permission on your ACR so it can pull images without needing a separate Kubernetes secret.
 
 #### How to do it
 ```bash
 az aks update \
   --name myAKSCluster \
-  --resource-group petclinic-rg \
+  --resource-group <your-resource-group> \
   --attach-acr <your-acr-name>
 ```
 
 #### Definition of done
-- Command runs without error
-- `az aks show --name myAKSCluster --resource-group petclinic-rg --query addonProfiles` shows ACR attached
+- Command completes without error
 
 ---
 
@@ -317,11 +336,11 @@ az aks update \
 ### Step 13 — Create SonarCloud Account and Project
 
 #### What it is
-SonarCloud is the hosted version of SonarQube — no installation needed. It analyzes your Java code for bugs, vulnerabilities, and code smells, then returns a pass/fail quality gate result to Jenkins.
+SonarCloud is the hosted version of SonarQube — no installation needed. It analyzes your Java code for bugs, vulnerabilities, and code smells, then sends a pass/fail quality gate result back to Jenkins.
 
 #### How to do it
 1. Go to sonarcloud.io → Sign up with GitHub
-2. Create an organization — note down the **organization key**
+2. Create an organization → note down the **organization key**
 3. Create a new project → manually → note down the **project key** and **project name**
 4. Go to **My Account** → **Security** → **Generate Token** → name it `jenkins` → Generate
 5. Copy the token immediately — you will not see it again
@@ -343,8 +362,7 @@ SonarCloud is the hosted version of SonarQube — no installation needed. It ana
    - Secret: paste your SonarCloud token
    - ID: `sonar`
    - Add
-6. Select `sonar` from the dropdown
-7. Save
+6. Select `sonar` from the dropdown → Save
 
 #### Definition of done
 - SonarQube server named `sonarserver` is saved in Jenkins System config
@@ -354,13 +372,13 @@ SonarCloud is the hosted version of SonarQube — no installation needed. It ana
 ### Step 15 — Add Service Principal to Jenkins Credentials
 
 #### What it is
-Jenkins stores secrets (passwords, tokens, keys) in its credential store — your Jenkinsfile references them by ID so the secret never appears in plain text in the code.
+Jenkins stores secrets in its credential store. Your Jenkinsfile references them by ID — the secret never appears in plain text in your code (same idea as environment variables in a `.env` file, but managed by Jenkins).
 
 #### How to do it
 1. Jenkins UI → **Manage Jenkins** → **Credentials** → **System** → **Global credentials** → **Add Credentials**
 2. **Kind**: Username with password
-3. **Username**: paste the `appId` (Client ID) from Step 11
-4. **Password**: paste the `password` (Secret) from Step 11
+3. **Username**: your `appId` (Client ID) from Step 11
+4. **Password**: your `password` (Secret) from Step 11
 5. **ID**: `azure-acr-spn`
 6. **Description**: `Azure Service Principal`
 7. Create
@@ -372,62 +390,58 @@ Jenkins stores secrets (passwords, tokens, keys) in its credential store — you
 
 ## PHASE 5 — Update Your k8s Deployment File
 
+---
+
 ### Step 16 — Update sprinboot-deployment.yaml
 
 #### What it is
-The Kubernetes deployment file tells AKS which Docker image to run. It currently has the original ACR name hardcoded. You need to change it to point to YOUR ACR.
+The Kubernetes deployment file tells AKS which Docker image to run and how. It currently has the original author's ACR name hardcoded. You need to change it to point to YOUR ACR.
 
 #### What to change
-Open `enahanced-petclinc-springboot/k8s/sprinboot-deployment.yaml` and update line 20:
+Open `enahanced-petclinc-springboot/k8s/sprinboot-deployment.yaml` and make two changes:
 
+**Change the image to your ACR:**
 ```yaml
-# Change this:
+# From:
 image: springbootdockerreg.azurecr.io/springbootapp:latest
 
-# To your ACR:
+# To:
 image: <your-acr-name>.azurecr.io/springbootapp:latest
 ```
 
-Also remove the `imagePullSecrets` block (lines 22-23) — since you attached ACR to AKS in Step 12, AKS can pull images without a separate secret:
+**Remove the imagePullSecrets block** — since you attached ACR to AKS in Step 12, AKS can pull images without a separate secret:
 ```yaml
-# Remove these two lines:
+# Remove these two lines entirely:
 imagePullSecrets:
 - name: acr-auth
 ```
 
 #### Definition of done
-- The image field points to your ACR login server
-- `imagePullSecrets` is removed
+- Image field points to your ACR login server
+- `imagePullSecrets` block is removed
 - File is committed and pushed to GitHub
 
 ---
 
 ## PHASE 6 — Writing the Jenkinsfile from Scratch
 
-### How this phase works
-The existing Jenkinsfile has all stages already written. You are going to **replace it with just the skeleton** and then add one stage at a time yourself. Git keeps the old version in history so you can always look back at it with `git log`.
-
-**The rule for every step in this phase:**
-1. You write the stage
+### The rule for this entire phase
+1. You write the stage yourself
 2. You push to GitHub
 3. You run the pipeline in Jenkins
 4. You confirm the definition of done is met
 5. Only then do you add the next stage
 
-The Jenkinsfile at any point in time should only contain stages you have already tested and passed. Never paste ahead.
+The Jenkinsfile at any point should only contain stages you have already tested and passed. Never write ahead.
 
 ---
 
 ### Step 17 — Replace the Jenkinsfile with the Skeleton
 
-#### What it is
-Every Jenkins pipeline starts with a `pipeline {}` block. Inside it you declare:
-- `agent any` — run on any available Jenkins agent (your VM)
-- `tools {}` — which tools Jenkins should set up (Maven)
-- `environment {}` — variables available to every stage (like `.env` in Node)
-- `stages {}` — where the actual work happens (empty for now)
+#### What to do first
+Open `enahanced-petclinc-springboot/Jenkinsfile`, **select all and delete everything**. The old content is preserved in git history — run `git log` anytime to look back at it.
 
-**First:** open `enahanced-petclinc-springboot/Jenkinsfile`, select all, and delete everything. Then write this from scratch yourself:
+Then write this from scratch:
 
 #### What to write
 ```groovy
@@ -443,7 +457,7 @@ pipeline {
         ACR_NAME         = '<your-acr-name>'
         ACR_LOGIN_SERVER = '<your-acr-name>.azurecr.io'
         FULL_IMAGE_NAME  = "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}"
-        RG               = 'petclinic-rg'
+        RG               = '<your-resource-group>'
         NAME             = 'myAKSCluster'
     }
     stages {
@@ -452,35 +466,11 @@ pipeline {
 }
 ```
 
-Fill in your own values for `TENANT_ID`, `ACR_NAME`, and `ACR_LOGIN_SERVER`.
+Fill in your own values for `TENANT_ID`, `ACR_NAME`, `ACR_LOGIN_SERVER`, and `RG`.
 
-```groovy
-pipeline {
-    agent any
-    tools {
-        maven 'maven'
-    }
-    environment {
-        IMAGE_NAME       = 'springbootapp'
-        IMAGE_TAG        = 'latest'
-        TENANT_ID        = '<your-tenant-id>'
-        ACR_NAME         = '<your-acr-name>'
-        ACR_LOGIN_SERVER = '<your-acr-name>.azurecr.io'
-        FULL_IMAGE_NAME  = "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}"
-        RG               = 'petclinic-rg'
-        NAME             = 'myAKSCluster'
-    }
-    stages {
-        // stages go here
-    }
-}
-```
-
-Fill in your own values for `TENANT_ID`, `ACR_NAME`, and `ACR_LOGIN_SERVER`.
-
-#### How to create the Jenkins pipeline job (do this once)
+#### Create the Jenkins pipeline job (do this once)
 1. Jenkins UI → **New Item** → name it `petclinic-pipeline` → **Pipeline** → OK
-2. Scroll to **Pipeline** section → **Definition**: Pipeline script from SCM
+2. Scroll to **Pipeline** → **Definition**: Pipeline script from SCM
 3. **SCM**: Git
 4. **Repository URL**: `https://github.com/bhat0155/enahanced-petclinc-springboot.git`
 5. **Branch**: `*/main`
@@ -488,9 +478,9 @@ Fill in your own values for `TENANT_ID`, `ACR_NAME`, and `ACR_LOGIN_SERVER`.
 7. Save → **Build Now**
 
 #### Definition of done
-- Jenkinsfile is pushed to GitHub (old content replaced with skeleton)
-- Pipeline job runs and shows green — even with empty `stages {}` it should parse without errors
-- You can see the pipeline job on the Jenkins dashboard
+- Jenkinsfile pushed to GitHub with skeleton only (old content deleted)
+- Pipeline job runs green — empty `stages {}` is valid and should pass
+- Pipeline job visible on Jenkins dashboard
 
 ---
 
@@ -511,8 +501,8 @@ stage('Checkout') {
 ```
 
 #### Definition of done
-- Pipeline runs this stage and shows it green
-- Jenkins workspace on the VM contains `Jenkinsfile`, `pom.xml`, `Dockerfile`, `src/`, `k8s/`
+- Stage is green in Jenkins
+- SSH into VM → `ls /var/lib/jenkins/workspace/petclinic-pipeline/enahanced-petclinc-springboot/` → shows `pom.xml`, `Dockerfile`, `src/`, `k8s/`
 
 ---
 
@@ -527,21 +517,21 @@ Think of it like `npm install && npm run build` but for Java.
 ```groovy
 stage('Maven Build') {
     steps {
-        sh 'mvn package'
+        sh 'mvn package -f enahanced-petclinc-springboot/pom.xml'
     }
 }
 ```
 
 #### Definition of done
 - Build logs show `BUILD SUCCESS`
-- `target/petclinic.war` exists in the Jenkins workspace
+- `enahanced-petclinc-springboot/target/petclinic.war` exists in the Jenkins workspace
 
 ---
 
 ### Step 20 — Stage 3: SonarQube Analysis
 
 #### What it is
-SonarQube Scanner reads your compiled code, checks it for bugs, security vulnerabilities, and bad practices, then sends the results to SonarCloud. This stage does not pass or fail the pipeline — the next stage does that.
+SonarQube Scanner reads your compiled code, checks it for bugs, security vulnerabilities, and bad practices, then sends the results to SonarCloud. This stage uploads the results — it does not pass or fail the pipeline. The next stage does that.
 
 #### What to write
 ```groovy
@@ -553,10 +543,10 @@ stage('SonarQube Analysis') {
         withSonarQubeEnv('sonarserver') {
             sh """
                 ${SCANNER_HOME}/bin/sonar-scanner \
-                -Dsonar.organization=<your-sonarcloud-org-key> \
+                -Dsonar.organization=<your-org-key> \
                 -Dsonar.projectName=<your-project-name> \
                 -Dsonar.projectKey=<your-project-key> \
-                -Dsonar.java.binaries=.
+                -Dsonar.java.binaries=enahanced-petclinc-springboot/target
             """
         }
     }
@@ -567,14 +557,14 @@ Fill in your SonarCloud organization key, project name, and project key from Ste
 
 #### Definition of done
 - Build logs show analysis uploaded to SonarCloud
-- SonarCloud dashboard shows your project with results
+- SonarCloud dashboard shows your project with scan results
 
 ---
 
 ### Step 21 — Stage 4: SonarQube Quality Gate
 
 #### What it is
-This stage pauses the pipeline and waits for SonarCloud to respond with a pass or fail. If the quality gate fails (too many bugs, vulnerabilities, or low coverage), `abortPipeline: true` stops the pipeline here and nothing after this runs — no Docker image gets built, nothing gets deployed. This is the guardrail.
+This stage pauses the pipeline and waits for SonarCloud to respond with pass or fail. If the quality gate fails, `abortPipeline: true` stops the pipeline — no Docker image gets built, nothing gets deployed. This is the guardrail that prevents bad code from shipping.
 
 #### What to write
 ```groovy
@@ -593,17 +583,46 @@ stage('Quality Gate') {
 
 ---
 
-### Step 22 — Stage 5: Docker Build
+### Step 22 — Install Docker on the VM + Stage 5: Docker Build
 
-#### What it is
-Jenkins tells Docker to build an image using the `Dockerfile` in your repo root. Docker reads the Dockerfile, copies the `petclinic.war` from `target/` into a Jetty web server image, and saves the result locally on the VM as `springbootapp:latest`.
+#### Why install Docker now?
+You only need Docker for the Docker Build stage and beyond. Installing it here so you understand exactly what it's for.
+
+#### Install Docker on the VM
+SSH into your VM and run:
+```bash
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Allow Jenkins to run Docker without sudo
+sudo usermod -aG docker jenkins
+
+# Restart Jenkins so it picks up the Docker group membership
+sudo systemctl restart jenkins
+```
+
+#### What the stage does
+Jenkins tells Docker to build an image using the `Dockerfile` in the repo. Docker reads it, copies the `petclinic.war` into a Jetty web server image, and saves the result locally on the VM as `springbootapp:latest`.
 
 #### What to write
 ```groovy
 stage('Docker Build') {
     steps {
         script {
-            docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+            docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "enahanced-petclinc-springboot")
         }
     }
 }
@@ -611,14 +630,33 @@ stage('Docker Build') {
 
 #### Definition of done
 - Build logs show `Successfully built <image-id>`
-- SSH into the VM and run `docker images` — you see `springbootapp:latest`
+- SSH into VM → `docker images` → shows `springbootapp:latest`
 
 ---
 
-### Step 23 — Stage 6: Trivy Security Scan
+### Step 23 — Install Trivy on the VM + Stage 6: Trivy Scan
 
-#### What it is
-Trivy scans the Docker image you just built for known CVEs (Common Vulnerabilities and Exposures) in the OS packages and Java dependencies. `--exit-code 1` makes Trivy return a failure exit code if it finds any HIGH or CRITICAL vulnerabilities, which breaks the pipeline — the image never gets pushed to ACR.
+#### Why install Trivy now?
+Trivy is only needed for the security scan stage. Installing it right before you use it.
+
+#### Install Trivy on the VM
+```bash
+sudo apt-get install -y wget apt-transport-https gnupg
+
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | \
+  sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] \
+  https://aquasecurity.github.io/trivy-repo/deb generic main" | \
+  sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
+
+sudo apt-get update -y
+sudo apt-get install -y trivy
+trivy --version
+```
+
+#### What the stage does
+Trivy scans the local Docker image for known CVEs (Common Vulnerabilities and Exposures). `--exit-code 1` means Trivy returns a failure if it finds HIGH or CRITICAL vulnerabilities — breaking the pipeline so the image never gets pushed.
 
 #### What to write
 ```groovy
@@ -629,19 +667,28 @@ stage('Trivy Scan') {
 }
 ```
 
-Note: double quotes are required here — single quotes would not expand `${IMAGE_NAME}`.
+Note: double quotes are required here — single quotes do not expand `${IMAGE_NAME}`.
 
 #### Definition of done
-- Build logs show Trivy scan output
+- Trivy scan output appears in build logs
 - If no HIGH/CRITICAL CVEs: stage is green, pipeline continues
-- Pipeline breaks here if serious CVEs are found
+- Pipeline breaks here if serious vulnerabilities are found
 
 ---
 
-### Step 24 — Stage 7: ACR Login + Docker Push
+### Step 24 — Install Azure CLI on the VM + Stage 7: ACR Login + Docker Push
 
-#### What it is
-Jenkins logs into Azure using the Service Principal credential, authenticates Docker to talk to ACR, retags the local image with the full ACR address, and pushes it. After this, the image lives in ACR and AKS can pull it.
+#### Why install Azure CLI now?
+Azure CLI is needed to log into Azure and push to ACR. Installing it right before the push stage.
+
+#### Install Azure CLI on the VM
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+az --version
+```
+
+#### What the stage does
+Jenkins logs into Azure using the Service Principal credential, authenticates Docker to talk to ACR, retags the local image with the full ACR address, and pushes it. After this step, the image lives in ACR and AKS can pull it.
 
 #### What to write
 ```groovy
@@ -674,10 +721,21 @@ stage('Push to ACR') {
 
 ---
 
-### Step 25 — Stage 8: Deploy to AKS
+### Step 25 — Install kubectl on the VM + Stage 8: Deploy to AKS
 
-#### What it is
-Jenkins logs into Azure again, fetches the AKS credentials (a kubeconfig file) so `kubectl` knows which cluster to talk to, then runs `kubectl apply`. Kubernetes reads the deployment YAML, pulls the image from ACR, and creates 3 running replicas. A LoadBalancer service gets assigned a public IP — that IP is your live app URL.
+#### Why install kubectl now?
+kubectl is the command-line tool that talks to Kubernetes. You only need it for the deploy stage.
+
+#### Install kubectl on the VM
+```bash
+curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
+kubectl version --client
+```
+
+#### What the stage does
+Jenkins logs into Azure, fetches the AKS cluster credentials (a kubeconfig file) so `kubectl` knows which cluster to talk to, then runs `kubectl apply`. Kubernetes pulls the image from ACR and runs 3 replicas. A LoadBalancer gets a public IP — that IP is your live app.
 
 #### What to write
 ```groovy
@@ -711,7 +769,7 @@ stage('Deploy to AKS') {
 - SSH into VM and run:
   - `kubectl get pods` → 3 pods in `Running` state
   - `kubectl get svc` → LoadBalancer shows an external IP
-- Open that IP in your browser → Petclinic app is live
+- Open that IP in a browser → Petclinic app is live
 
 ---
 
@@ -722,13 +780,13 @@ PHASE 1: Azure Infrastructure
   Step 1   Create Resource Group
   Step 2   Create Ubuntu VM
   Step 3   Open port 8080
-  Step 4   SSH in + run installations.sh
+  Step 4   Install Git + Java + Jenkins on VM
   Step 5   Access Jenkins, initial setup
+  Step 6   Install Jenkins plugins
 
-PHASE 2: Jenkins Configuration
-  Step 6   Install plugins (Docker Pipeline, SonarQube Scanner, Kubernetes CLI)
-  Step 7   Configure Maven tool
-  Step 8   Configure SonarQube Scanner tool
+PHASE 2: Jenkins + Maven Setup
+  Step 7   Install Maven on VM + configure Maven tool in Jenkins
+  Step 8   Configure SonarQube Scanner tool in Jenkins
 
 PHASE 3: Azure Resources
   Step 9   Create ACR
@@ -744,14 +802,14 @@ PHASE 4: SonarCloud + Jenkins Credentials
 PHASE 5: k8s YAML
   Step 16  Update sprinboot-deployment.yaml with your ACR name
 
-PHASE 6: Jenkinsfile (write one stage at a time)
-  Step 17  Pipeline skeleton + environment variables
+PHASE 6: Jenkinsfile (write one stage at a time, test before moving on)
+  Step 17  Skeleton + environment variables
   Step 18  Stage 1 — Git Checkout
-  Step 19  Stage 2 — Maven Build
+  Step 19  Stage 2 — Maven Build          [Maven already installed — Step 7]
   Step 20  Stage 3 — SonarQube Analysis
   Step 21  Stage 4 — Quality Gate
-  Step 22  Stage 5 — Docker Build
-  Step 23  Stage 6 — Trivy Scan
-  Step 24  Stage 7 — ACR Login + Docker Push
-  Step 25  Stage 8 — Deploy to AKS
+  Step 22  Install Docker on VM → Stage 5 — Docker Build
+  Step 23  Install Trivy on VM  → Stage 6 — Trivy Scan
+  Step 24  Install Azure CLI on VM → Stage 7 — ACR Login + Docker Push
+  Step 25  Install kubectl on VM → Stage 8 — Deploy to AKS
 ```
