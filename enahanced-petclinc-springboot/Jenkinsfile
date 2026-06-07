@@ -1,6 +1,6 @@
 pipeline {
     agent any
-    
+
     tools {
         maven 'maven'
     }
@@ -17,6 +17,11 @@ pipeline {
     }
 
     stages {
-
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/bhat0155/enahanced-petclinc-springboot.git'
+            }
+        }
     }
 }
