@@ -593,6 +593,8 @@ Note: `\$SONAR_TOKEN` — the backslash is required so the shell evaluates it at
 #### What it is
 This stage pauses the pipeline and waits for SonarCloud to respond with pass or fail. If the quality gate fails, `abortPipeline: true` stops the pipeline — no Docker image gets built, nothing gets deployed. This is the guardrail that prevents bad code from shipping.
 
+The `timeout(time: 2, unit: 'MINUTES')` is a ceiling, not a fixed wait. `waitForQualityGate` returns the moment SonarCloud responds — typically 15–30 seconds. The timeout just kills the stage if SonarCloud is down or unreachable.
+
 #### What to write
 ```groovy
 stage('Quality Gate') {
@@ -604,8 +606,18 @@ stage('Quality Gate') {
 }
 ```
 
+#### Token mismatch — real-world issue
+Jenkins has two separate places that hold a SonarCloud token:
+1. **Jenkins credentials store** (ID: `sonar`) — used by `withCredentials` in the Analysis stage
+2. **SonarQube server configuration** (`sonarserver` in Manage Jenkins → System) — used by `waitForQualityGate` to poll SonarCloud
+
+If you updated the `sonar` credential but not the one referenced by the server config, `waitForQualityGate` will fail with `Error 404 - Project doesn't exist` even though the analysis uploaded fine.
+
+**Fix:** Generate a fresh SonarCloud token (My Account → Security → Generate Token). Update the `sonar` credential in Jenkins with the new token. The `sonarserver` config references that same credential by ID, so it picks up the new value automatically. Re-run the pipeline.
+
 #### Definition of done
-- Build logs show `Quality gate status: OK`
+- Build logs show `Quality gate is 'OK'`
+- Build logs show `Finished: SUCCESS`
 - Pipeline continues to next stage
 
 ---
