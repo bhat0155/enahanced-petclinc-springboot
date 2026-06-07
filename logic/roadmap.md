@@ -46,7 +46,7 @@ This VM is the machine Jenkins will run on. All your pipeline commands (Maven bu
 
 #### How to do it
 1. Azure Portal → search **Virtual Machines** → Create → Azure Virtual Machine
-2. **Resource group**: your resource group from Step 1
+2. **Resource group**: `petclinic-rg` — select the existing one from Step 1. Do NOT let Azure create a new resource group here. If you miss this, the VM lands in its own group and you will have to delete two resource groups separately at cleanup.
 3. **Virtual machine name**: `jenkins-vm`
 4. **Region**: same as your resource group
 5. **Image**: `Ubuntu Server 22.04 LTS`
@@ -105,21 +105,24 @@ sudo apt-get install -y git
 git --version
 ```
 
-#### Install Java 17
-Jenkins requires Java to run. Java 17 is the current LTS version.
+#### Install Java 21
+Jenkins requires Java to run. Jenkins 2.5x+ dropped support for Java 17 — the minimum is now Java 21. The Spring Petclinic app compiles to Java 17 bytecode (set in pom.xml), but that is the output bytecode version, not the JVM version. Java 21 runs Java 17 bytecode without any issue, so Maven builds will still work correctly.
 ```bash
-sudo apt-get install -y openjdk-17-jdk
+sudo apt-get install -y openjdk-21-jdk
+sudo update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java
 java -version
 ```
 
 #### Install Jenkins
-```bash
-sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
-  https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+The Jenkins signing key must be converted from ASCII-armored format to binary GPG format before apt can use it to verify the repository. Using `wget` and saving as `.asc` skips this conversion and causes a `NO_PUBKEY` error on newer systems. The `gpg --dearmor` step does the conversion.
 
-echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
-  https://pkg.jenkins.io/debian-stable binary/" | sudo tee \
-  /etc/apt/sources.list.d/jenkins.list > /dev/null
+```bash
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | \
+  sudo gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] \
+  https://pkg.jenkins.io/debian-stable binary/" | \
+  sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
 
 sudo apt-get update -y
 sudo apt-get install -y jenkins
@@ -135,7 +138,7 @@ Copy this password — you need it to unlock Jenkins in your browser.
 
 #### Definition of done
 - `git --version` → shows a version number
-- `java -version` → shows Java 17
+- `java -version` → shows Java 21
 - `sudo systemctl status jenkins` → shows `active (running)`
 - You have the initial admin password copied
 
@@ -193,7 +196,7 @@ Ubuntu 22.04's package repository ships Maven **3.6.3**. This project's `pom.xml
 #### Install Maven on the VM
 SSH into your VM and run:
 ```bash
-MVN_VERSION=3.9.9
+MVN_VERSION=3.9.16
 wget https://downloads.apache.org/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz
 sudo tar -xzf apache-maven-${MVN_VERSION}-bin.tar.gz -C /opt
 sudo ln -s /opt/apache-maven-${MVN_VERSION} /opt/maven
@@ -213,7 +216,7 @@ Jenkins needs to know where Maven lives on the VM so it can call it during build
 6. Save
 
 #### Definition of done
-- `mvn -version` on the VM shows Maven 3.9.9
+- `mvn -version` on the VM shows Maven 3.9.16
 - Maven tool named `maven` is saved in Jenkins Tools with MAVEN_HOME `/opt/maven`
 
 ---
@@ -246,7 +249,7 @@ ACR is your private Docker image registry — like a private Docker Hub hosted i
 
 #### How to do it
 1. Azure Portal → search **Container registries** → Create
-2. **Resource group**: your resource group
+2. **Resource group**: `petclinic-rg` — select the existing one, do not create a new one
 3. **Registry name**: choose a unique name e.g. `yournamepetclinic` (globally unique, lowercase only)
 4. **Location**: same region as your VM
 5. **SKU**: Basic
@@ -269,7 +272,7 @@ AKS (Azure Kubernetes Service) is the managed Kubernetes cluster where your app 
 
 #### How to do it
 1. Azure Portal → search **Kubernetes services** → Create → Create a Kubernetes cluster
-2. **Resource group**: your resource group
+2. **Resource group**: `petclinic-rg` — select the existing one, do not create a new one
 3. **Cluster name**: `myAKSCluster`
 4. **Region**: same as everything else
 5. **Node count**: 1 (enough for a bootcamp)

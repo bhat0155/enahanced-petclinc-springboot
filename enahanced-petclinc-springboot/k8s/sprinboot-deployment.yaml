@@ -16,11 +16,9 @@ spec:
     spec:
       containers:
       - name: springboot-app
-        image: springbootdockerreg.azurecr.io/springbootapp:latest
+        image: yournamepetclinic.azurecr.io/springbootapp:latest
         ports:
         - containerPort: 8080
-      imagePullSecrets:
-      - name: acr-auth
 
 ---
 apiVersion: v1
