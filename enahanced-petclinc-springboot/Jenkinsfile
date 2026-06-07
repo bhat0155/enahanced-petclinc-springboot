@@ -65,5 +65,26 @@ pipeline {
                 sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
+        stage('Push to ACR') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'azure-acr-spn',
+                    usernameVariable: 'AZURE_USERNAME',
+                    passwordVariable: 'AZURE_PASSWORD'
+                )]) {
+                    sh """
+                        az login --service-principal \
+                            -u \$AZURE_USERNAME \
+                            -p \$AZURE_PASSWORD \
+                            --tenant ${TENANT_ID}
+
+                        az acr login --name ${ACR_NAME}
+
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${FULL_IMAGE_NAME}
+                        docker push ${FULL_IMAGE_NAME}
+                    """
+                }
+            }
+        }
     }
 }
