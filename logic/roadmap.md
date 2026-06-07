@@ -404,21 +404,55 @@ imagePullSecrets:
 
 ## PHASE 6 — Writing the Jenkinsfile from Scratch
 
-You will write this yourself, one stage at a time. Each step below tells you what to write and why. After each stage, push to GitHub and run the pipeline to confirm that stage works before moving on.
+### How this phase works
+The existing Jenkinsfile has all stages already written. You are going to **replace it with just the skeleton** and then add one stage at a time yourself. Git keeps the old version in history so you can always look back at it with `git log`.
+
+**The rule for every step in this phase:**
+1. You write the stage
+2. You push to GitHub
+3. You run the pipeline in Jenkins
+4. You confirm the definition of done is met
+5. Only then do you add the next stage
+
+The Jenkinsfile at any point in time should only contain stages you have already tested and passed. Never paste ahead.
 
 ---
 
-### Step 17 — Pipeline Skeleton + Environment Variables
+### Step 17 — Replace the Jenkinsfile with the Skeleton
 
 #### What it is
 Every Jenkins pipeline starts with a `pipeline {}` block. Inside it you declare:
 - `agent any` — run on any available Jenkins agent (your VM)
 - `tools {}` — which tools Jenkins should set up (Maven)
 - `environment {}` — variables available to every stage (like `.env` in Node)
-- `stages {}` — where the actual work happens
+- `stages {}` — where the actual work happens (empty for now)
+
+**First:** open `enahanced-petclinc-springboot/Jenkinsfile`, select all, and delete everything. Then write this from scratch yourself:
 
 #### What to write
-Create a new file at `enahanced-petclinc-springboot/Jenkinsfile` with just the skeleton:
+```groovy
+pipeline {
+    agent any
+    tools {
+        maven 'maven'
+    }
+    environment {
+        IMAGE_NAME       = 'springbootapp'
+        IMAGE_TAG        = 'latest'
+        TENANT_ID        = '<your-tenant-id>'
+        ACR_NAME         = '<your-acr-name>'
+        ACR_LOGIN_SERVER = '<your-acr-name>.azurecr.io'
+        FULL_IMAGE_NAME  = "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}"
+        RG               = 'petclinic-rg'
+        NAME             = 'myAKSCluster'
+    }
+    stages {
+        // stages go here — add one at a time after each definition of done
+    }
+}
+```
+
+Fill in your own values for `TENANT_ID`, `ACR_NAME`, and `ACR_LOGIN_SERVER`.
 
 ```groovy
 pipeline {
@@ -444,9 +478,19 @@ pipeline {
 
 Fill in your own values for `TENANT_ID`, `ACR_NAME`, and `ACR_LOGIN_SERVER`.
 
+#### How to create the Jenkins pipeline job (do this once)
+1. Jenkins UI → **New Item** → name it `petclinic-pipeline` → **Pipeline** → OK
+2. Scroll to **Pipeline** section → **Definition**: Pipeline script from SCM
+3. **SCM**: Git
+4. **Repository URL**: `https://github.com/bhat0155/enahanced-petclinc-springboot.git`
+5. **Branch**: `*/main`
+6. **Script Path**: `enahanced-petclinc-springboot/Jenkinsfile`
+7. Save → **Build Now**
+
 #### Definition of done
-- File exists, values filled in, pushed to GitHub
-- Jenkins can parse it without syntax errors (create a pipeline job pointing to your repo to test)
+- Jenkinsfile is pushed to GitHub (old content replaced with skeleton)
+- Pipeline job runs and shows green — even with empty `stages {}` it should parse without errors
+- You can see the pipeline job on the Jenkins dashboard
 
 ---
 
