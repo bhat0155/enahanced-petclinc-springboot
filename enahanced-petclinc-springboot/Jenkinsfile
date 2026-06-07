@@ -23,9 +23,25 @@ pipeline {
                     url: 'https://github.com/bhat0155/enahanced-petclinc-springboot.git'
             }
         }
-        stage('Maven Build'){
+        stage('Maven Build') {
             steps {
                 sh 'mvn package -f enahanced-petclinc-springboot/pom.xml'
+            }
+        }
+        stage('SonarQube Analysis') {
+            environment {
+                SCANNER_HOME = tool 'Sonar-scanner'
+            }
+            steps {
+                withSonarQubeEnv('sonarserver') {
+                    sh """
+                        ${SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.organization=bhat0155 \
+                        -Dsonar.projectName=enahanced-petclinc-springboot \
+                        -Dsonar.projectKey=bhat0155_enahanced-petclinc-springboot \
+                        -Dsonar.java.binaries=enahanced-petclinc-springboot/target
+                    """
+                }
             }
         }
     }
