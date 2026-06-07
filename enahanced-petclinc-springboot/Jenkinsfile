@@ -30,16 +30,18 @@ pipeline {
         }
         stage('SonarQube Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'sonar', variable: 'SONAR_TOKEN')]) {
-                    sh """
-                        mvn sonar:sonar \
-                        -f enahanced-petclinc-springboot/pom.xml \
-                        -Dsonar.host.url=https://sonarcloud.io \
-                        -Dsonar.organization=bhat0155 \
-                        -Dsonar.projectKey=bhat0155_enahanced-petclinc-springboot \
-                        -Dsonar.token=\$SONAR_TOKEN \
-                        -DskipTests
-                    """
+                withSonarQubeEnv('sonarserver') {
+                    withCredentials([string(credentialsId: 'sonar', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            mvn sonar:sonar \
+                            -f enahanced-petclinc-springboot/pom.xml \
+                            -Dsonar.host.url=https://sonarcloud.io \
+                            -Dsonar.organization=bhat0155 \
+                            -Dsonar.projectKey=bhat0155_enahanced-petclinc-springboot \
+                            -Dsonar.token=\$SONAR_TOKEN \
+                            -DskipTests
+                        """
+                    }
                 }
             }
         }
