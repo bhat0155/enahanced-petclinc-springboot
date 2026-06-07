@@ -187,10 +187,18 @@ Plugins extend Jenkins with extra capabilities. The pipeline needs plugins for D
 #### Why now?
 The Maven Build stage needs Maven. Installing it now so you can configure the Jenkins tool and immediately test it in Step 19.
 
+#### Why not `apt-get install maven`?
+Ubuntu 22.04's package repository ships Maven **3.6.3**. This project's `pom.xml` has a maven-enforcer rule that requires Maven **3.8.4 or higher** — the build will fail at the very first step with an enforcer error before any code is even compiled. We install Maven manually to get a version that satisfies that constraint.
+
 #### Install Maven on the VM
 SSH into your VM and run:
 ```bash
-sudo apt-get install -y maven
+MVN_VERSION=3.9.9
+wget https://downloads.apache.org/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz
+sudo tar -xzf apache-maven-${MVN_VERSION}-bin.tar.gz -C /opt
+sudo ln -s /opt/apache-maven-${MVN_VERSION} /opt/maven
+echo 'export PATH=/opt/maven/bin:$PATH' | sudo tee /etc/profile.d/maven.sh
+source /etc/profile.d/maven.sh
 mvn -version
 ```
 
@@ -201,12 +209,12 @@ Jenkins needs to know where Maven lives on the VM so it can call it during build
 2. Scroll to **Maven installations** → **Add Maven**
 3. **Name**: `maven` (must match exactly — this is what the Jenkinsfile will reference)
 4. Uncheck **Install automatically**
-5. **MAVEN_HOME**: `/usr/share/maven`
+5. **MAVEN_HOME**: `/opt/maven`
 6. Save
 
 #### Definition of done
-- `mvn -version` on the VM shows Maven installed
-- Maven tool named `maven` is saved in Jenkins Tools
+- `mvn -version` on the VM shows Maven 3.9.9
+- Maven tool named `maven` is saved in Jenkins Tools with MAVEN_HOME `/opt/maven`
 
 ---
 
